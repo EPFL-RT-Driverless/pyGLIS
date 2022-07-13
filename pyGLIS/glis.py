@@ -31,11 +31,11 @@ class GLIS:
         Aineq=None,
         bineq=None,
         g=None,
-        shrink_range=1,
+        shrink_range=True,
         constraint_penalty=1000,
         feasible_sampling=False,
         globoptsol="direct",
-        display=0,
+        display=False,
         PSOiters=500,
         PSOswarmsize=20,
         epsDeltaF=1e-4,
@@ -123,73 +123,82 @@ class GLIS:
             ), "Inconsistent dimensions for Aineq and bineq : Aineq.shape = {} and bineq.shape = {}".format(
                 Aineq.shape, bineq.shape
             )
+            self.isLinConstrained = True
         else:
             raise ValueError("Both Aineq and bineq must be specified")
 
-        isNLConstrained = g0 != 0
-        if not isLinConstrained and not isNLConstrained:
-            feasible_sampling = False
+        self.isNLConstrained = self.g is not None
+        if not self.isLinConstrained and not self.isNLConstrained:
+            self.feasible_sampling = False
 
-        f = f0
-        g = g0
-        dd = (ub - lb) / 2  # compute dd,d0 even if scalevars=0 so to return them
-        d0 = (ub + lb) / 2
-        if scalevars:
-            # Rescale problem variables in [-1,1]
-            f = lambda x: f0(x * dd + d0)
+        # scaling variables in [-1,1]
+        if self.scalevars:
+            self.dd = (self.ub - self.lb) / 2
+            self.d0 = (self.ub + self.lb) / 2
+            self.lb = -np.ones(self.nvar)
+            self.ub = np.ones(self.nvar)
+            self.f = lambda x: self.f(x * self.dd + self.d0)
 
-            lb = -np.ones(nvar)
-            ub = np.ones(nvar)
+            if self.isLinConstrained:
+                self.bineq = self.bineq - self.Aineq.dot(self.d0)
+                self.Aineq = self.Aineq.dot(np.diag(self.dd.flatten("C")))
 
-            if isLinConstrained:
-                bineq = bineq - Aineq.dot(d0)
-                Aineq = Aineq.dot(np.diag(dd.flatten("C")))
+            if self.isNLConstrained:
+                self.g = lambda x: self.g(x * self.dd + self.d0)
 
-            if isNLConstrained:
-                g = lambda x: g0(x * dd + d0)
+        # set solver options for the minimization of the acquisition function
+        if self.globoptsol == "pswarm":
+            self.DIRECTopt = None
+        else:  # self.globoptsol == "direct"
+            self.DIRECTopt = nlopt.opt(nlopt.GN_DIRECT, 2)
+            self.DIRECTopt.set_lower_bounds(self.lb.flatten("C"))
+            self.DIRECTopt.set_upper_bounds(self.ub.flatten("C"))
+            self.DIRECTopt.set_ftol_abs(1e-5)
+            self.DIRECTopt.set_maxeval(2000)
+            self.DIRECTopt.set_xtol_rel(1e-5)
 
-        # set solver options
-        if globoptsol == "pswarm":
-            DIRECTopt = []
-        else:  # globoptsol == "direct"
-            DIRECTopt = nlopt.opt(nlopt.GN_DIRECT, 2)
-            DIRECTopt.set_lower_bounds(lb.flatten("C"))
-            DIRECTopt.set_upper_bounds(ub.flatten("C"))
-            DIRECTopt.set_ftol_abs(1e-5)
-            DIRECTopt.set_maxeval(2000)
-            DIRECTopt.set_xtol_rel(1e-5)
+        # shrink lb,ub
+        if self.shrink_range:
+            if not self.isNLConstrained and self.isLinConstrained:
+                flin = np.zeros((self.nvar, 1))
 
-        if shrink_range == 1:
-            # possibly shrink lb,ub to constraints
-            if not isNLConstrained and isLinConstrained:
-                flin = np.zeros((nvar, 1))
+                for i in range(self.nvar):
+                    flin[i] = 1.0
+                    res = linprog(
+                        flin, self.Aineq, self.bineq, bounds=(self.lb, self.ub)
+                    )
+                    self.lb[i] = np.max(self.lb[i], res.fun)
+                    flin[i] = -1.0
+                    res = linprog(
+                        flin, self.Aineq, self.bineq, bounds=(self.lb, self.ub)
+                    )
+                    self.ub[i] = np.min(self.ub[i], -res.fun)
+                    flin[i] = 0.0
 
-                for i in range(nvar):
-                    flin[i] = 1
-                    res = linprog(flin, Aineq, bineq, bounds=(lb, ub))
-                    aux = max(lb[i], res.fun)
-                    lb[i] = aux
-                    flin[i] = -1
-                    res = linprog(flin, Aineq, bineq, bounds=(lb, ub))
-                    aux = min(ub[i], -res.fun)
-                    ub[i] = aux
-                    flin[i] = 0
-
-            elif isNLConstrained:
-                NLpenaltyfun = lambda x: np.sum(np.square(np.maximum(g(x), 0)))
-                if isLinConstrained:
+            elif self.isNLConstrained:
+                NLpenaltyfun = lambda x: np.sum(np.square(np.maximum(self.g(x), 0.0)))
+                if self.isLinConstrained:
                     LINpenaltyfun = lambda x: np.sum(
-                        np.square(np.maximum((Aineq.dot(x) - bineq).flatten("C"), 0))
+                        np.square(np.maximum(self.Aineq.dot(x) - self.bineq, 0.0))
                     )
                 else:
-                    LINpenaltyfun = lambda x: 0
+                    LINpenaltyfun = lambda x: 0.0
 
-                for i in range(0, nvar):
+                for i in range(self.nvar):
                     obj_fun = lambda x: x[i] + 1.0e4 * (
                         NLpenaltyfun(x) + LINpenaltyfun(x)
                     )
-                    if globoptsol == "pswarm":
-                        if display == 0:
+                    if self.globoptsol == "pswarm":
+                        if self.display:
+                            z, cost = pso(
+                                obj_fun,
+                                lb,
+                                ub,
+                                swarmsize=30,
+                                minfunc=1e-8,
+                                maxiter=2000,
+                            )
+                        else:
                             with contextlib.redirect_stdout(io.StringIO()):
                                 z, cost = pso(
                                     obj_fun,
@@ -199,18 +208,11 @@ class GLIS:
                                     minfunc=1e-8,
                                     maxiter=2000,
                                 )
-                        else:
-                            z, cost = pso(
-                                obj_fun,
-                                lb,
-                                ub,
-                                swarmsize=30,
-                                minfunc=1e-8,
-                                maxiter=2000,
-                            )
+
                     else:  # globoptsol=="direct":
-                        DIRECTopt.set_min_objective(lambda x, grad: obj_fun(x)[0])
-                        z = DIRECTopt.optimize(z.flatten("C"))
+                        self.DIRECTopt.set_min_objective(lambda x, grad: obj_fun(x)[0])
+                        z = self.DIRECTopt.optimize(z.flatten("C"))
+
                     lb[i] = max(lb[i], z[i])
 
                     obj_fun = lambda x: -x[i] + 1.0e4 * (
