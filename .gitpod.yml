@@ -4,7 +4,6 @@ tasks:
 github:
   prebuilds:
     branches: true
-    master: true
 
 vscode:
   extensions:

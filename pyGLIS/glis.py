@@ -79,6 +79,7 @@ class GLIS:
             nsamp = 2 * nvars
 
         # Assertions
+        assert svdtol > 0.0, "svdtol must be positive but svdtol = {}".format(svdtol)
         assert globoptsol in ["direct", "pswarm"], "Unknown solver"
         assert (
             maxevals >= nsamp
@@ -190,6 +191,7 @@ class GLIS:
                     )
                     if self.globoptsol == "pswarm":
                         if self.display:
+                            # TODO : use the specified params PSOswarmsize and PSOiters ?
                             z, cost = pso(
                                 obj_fun,
                                 lb,
@@ -208,7 +210,6 @@ class GLIS:
                                     minfunc=1e-8,
                                     maxiter=2000,
                                 )
-
                     else:  # globoptsol=="direct":
                         self.DIRECTopt.set_min_objective(lambda x, grad: obj_fun(x)[0])
                         z = self.DIRECTopt.optimize(z.flatten("C"))
@@ -219,8 +220,17 @@ class GLIS:
                         NLpenaltyfun(x) + LINpenaltyfun(x)
                     )
 
-                    if globoptsol == "pswarm":
-                        if display == 0:
+                    if self.globoptsol == "pswarm":
+                        if self.display:
+                            z, cost = pso(
+                                obj_fun,
+                                lb,
+                                ub,
+                                swarmsize=30,
+                                minfunc=1e-8,
+                                maxiter=2000,
+                            )
+                        else:
                             with contextlib.redirect_stdout(io.StringIO()):
                                 z, cost = pso(
                                     obj_fun,
@@ -230,66 +240,225 @@ class GLIS:
                                     minfunc=1e-8,
                                     maxiter=2000,
                                 )
-                        else:
-                            z, cost = pso(
-                                obj_fun,
-                                lb,
-                                ub,
-                                swarmsize=30,
-                                minfunc=1e-8,
-                                maxiter=2000,
-                            )
                     else:  # globoptsol=="direct":
-                        DIRECTopt.set_min_objective(lambda x, grad: obj_fun(x)[0])
-                        z = DIRECTopt.optimize(z.flatten("C"))
-                    ub[i] = min(ub[i], z[i])
+                        self.DIRECTopt.set_min_objective(lambda x, grad: obj_fun(x)[0])
+                        z = self.DIRECTopt.optimize(z.flatten())
 
-        X = np.zeros((maxevals, nvar))
-        F = np.zeros((maxevals, 1))
-        z = (lb + ub) / 2
+                    self.ub[i] = np.min(self.ub[i], z[i])
+
+        self.X = np.zeros((self.maxevals, self.nvar))
+        self.F = np.zeros(self.maxevals)
+        z = (self.lb + self.ub) / 2
 
         if not feasible_sampling:
-            X[0:nsamp, :] = lhs(nvar, nsamp, "m")
-            X[0:nsamp, :] = (
-                X[0:nsamp, :] * (np.ones((nsamp, 1)) * (ub - lb))
-                + np.ones((nsamp, 1)) * lb
+            # generate the samples using Latin Hypercube Sampling (generates values in [0,1])
+            self.X[0 : self.nsamp, :] = lhs(
+                n=self.nvar, samples=self.nsamp, criterion="m"
+            )
+            # re-scale the sample to our bounds defined by self.lb and self.ub
+            self.X[0 : self.nsamp, :] = (
+                self.X[0 : self.nsamp, :]
+                * (np.ones((self.nsamp, 1)) * (self.ub - self.lb))
+                + np.ones((self.nsamp, 1)) * self.lb
             )
         else:
-            nn = nsamp
-            nk = 0
-            while nk < nsamp:
-                XX = lhs(nvar, nn, "m")
-                XX = XX * (np.ones((nn, 1)) * (ub - lb)) + np.ones((nn, 1)) * lb
+            tpr_nsamp = self.nsamp
+            nbr_feasible_samples = 0
+            while nbr_feasible_samples < self.nsamp:
+                XX = lhs(n=self.nvar, samples=tpr_nsamp, crieterion="m")
+                XX = (
+                    XX * (np.ones((tpr_nsamp, 1)) * (self.ub - self.lb))
+                    + np.ones((tpr_nsamp, 1)) * self.lb
+                )
 
-                ii = np.ones(nn, dtype=bool)
-                for i in range(nn):
-                    if isLinConstrained:
-                        ii[i] = np.all(Aineq.dot(XX[i, :]) <= bineq.ravel("C"))
-                    if isNLConstrained:
-                        ii[i] = ii[i] and np.all(g(XX[i, :]) <= 0)
+                # find indices of sample points where all the constraints are satisfied.
+                sample_idx = np.ones(tpr_nsamp, dtype=bool)
+                for i in range(tpr_nsamp):
+                    if self.isLinConstrained:
+                        sample_idx[i] = np.all(self.Aineq.dot(XX[i, :]) <= self.bineq)
+                    if self.isNLConstrained:
+                        sample_idx[i] = sample_idx[i] and np.all(
+                            self.g(XX[i, :]) <= 0.0
+                        )
 
-                nk = np.sum(ii)
-                if nk == 0:
-                    nn = 20 * nn
-                elif nk < nsamp:
-                    nn = np.ceil(np.min(20, 1.1 * nsamp / nk) * nn)
-
-            ii = np.nonzero(ii)[0]
-            X[0:nsamp, :] = XX[np.nonzero(ii), :]
-
-        if useRBF:
-            M = np.zeros((maxevals, maxevals))  # preallocate the entire matrix
-            for i in range(nsamp):
-                for j in range(i, nsamp):
-                    mij = rbf(
-                        X[
-                            i,
-                        ],
-                        X[
-                            j,
-                        ],
+                # check if we havve enough feasible points. If not increase the number of samples and try again
+                nbr_feasible_samples = np.sum(sample_idx)
+                if nbr_feasible_samples == 0:
+                    tpr_nsamp = 20 * tpr_nsamp
+                elif nbr_feasible_samples < self.nsamp:
+                    tpr_nsamp = np.ceil(
+                        np.min(20, 1.1 * self.nsamp / nbr_feasible_samples) * tpr_nsamp
                     )
-                    M[i, j] = mij
-                    M[j, i] = mij
+
+            feasible_samples_idx = np.nonzero(sample_idx)[0]
+            self.X[0 : self.nsamp, :] = XX[feasible_samples_idx, :]
+
+        # pre-allocate the Gram matrix for the RBF functions
+        if useRBF:
+            self.M = np.zeros((self.maxevals, self.maxevals))
+            for i in range(self.nsamp):
+                for j in range(i, self.nsamp):
+                    rbf_kernel_value = self.rbf(
+                        self.X[i, :],
+                        self.X[j, :],
+                    )
+                    self.M[i, j] = rbf_kernel_value
+                    self.M[j, i] = rbf_kernel_value
         else:
-            M = []
+            self.M = None
+
+    def get_rbf_weights(self, NX):
+        # Solve M*W = F using SVD
+        assert self.M.shape == (
+            NX,
+            NX,
+        ), "Gram matrix M has wrong shape: {} instead of {}".format(
+            self.M.shape, (NX, NX)
+        )
+        U, dS, V = np.linalg.vd(self.M)
+        non_nnegligeable_singular_values_idx = np.nonzero(dS >= self.svdtol)[0]
+        ns = np.max(non_nnegligeable_singular_values_idx) + 1
+        W = np.transpose(V[0:ns, :]).dot(
+            np.diag(1 / dS[0:ns].flatten()).dot((U[:, 0:ns].T).dot(self.F[0:NX]))
+        )
+
+        return W
+
+    def get_delta_adpt(X, constraint_set, delta_const_default):
+        ind = constraint_set.shape[0]
+        sqr_error_feas = zeros((ind, 1))
+        for i in range(0, ind):
+            xx = X[i, :]
+            Xi = vstack((X[0:i, :], X[i + 1 : ind, :]))
+            constraint_set_i = vstack(
+                (
+                    constraint_set[
+                        0:i,
+                    ],
+                    constraint_set[
+                        i + 1 : ind,
+                    ],
+                )
+            )
+            Feas_xx = constraint_set[i]
+            d = npsum((Xi - xx) ** 2, axis=-1)
+            w = npsum(-d) / d
+            sw = sum(w)
+            ghat = npsum(constraint_set_i.T * w) / sw
+            sqr_error_feas[i] = (ghat - Feas_xx) ** 2
+
+        std_feas = (sum(sqr_error_feas) / (ind - 1)) ** (1 / 2)
+        delta_adpt = (1 - std_feas) * delta_const_default
+
+        return delta_adpt
+
+    def facquisition(
+        xx,
+        X,
+        F,
+        N,
+        alpha,
+        delta_E,
+        dF,
+        W,
+        rbf,
+        useRBF,
+        isUnknownFeasibilityConstrained,
+        isUnknownSatisfactionConstrained,
+        Feasibility_unkn,
+        SatConst_unkn,
+        delta_G,
+        delta_S,
+        iw_ibest,
+        maxevals,
+    ):
+        # Acquisition function to minimize to get next sample
+
+        d = npsum(
+            (
+                X[
+                    0:N,
+                ]
+                - xx
+            )
+            ** 2,
+            axis=-1,
+        )
+
+        ii = where(d < 1e-12)
+        if ii[0].size > 0:
+            fhat = F[ii[0]][0]
+            dhat = 0
+            if isUnknownFeasibilityConstrained:
+                Ghat = Feasibility_unkn[ii]
+            else:
+                Ghat = 1
+            if isUnknownSatisfactionConstrained:
+                Shat = SatConst_unkn[ii]
+            else:
+                Shat = 1
+        else:
+            w = exp(-d) / d
+            sw = sum(w)
+
+            if useRBF:
+                v = rbf(X[0:N, :], xx)
+                fhat = v.ravel().dot(W.ravel())
+            else:
+                fhat = (
+                    npsum(
+                        F[
+                            0:N,
+                        ]
+                        * w
+                    )
+                    / sw
+                )
+
+            if maxevals <= 30:
+                # for comparision, used in the original GLIS and when N_max <= 30 in C-GLIS
+                dhat = delta_E * atan(1 / sum(1 / d)) * 2 / pi * dF + alpha * sqrt(
+                    sum(
+                        w
+                        * (
+                            F[
+                                0:N,
+                            ]
+                            - fhat
+                        ).flatten("c")
+                        ** 2
+                    )
+                    / sw
+                )
+            else:
+                dhat = delta_E * (
+                    (1 - N / maxevals) * atan((1 / sum(1.0 / d)) / iw_ibest)
+                    + N / maxevals * atan(1 / sum(1.0 / d))
+                ) * 2 / pi * dF + alpha * sqrt(
+                    sum(
+                        w
+                        * (
+                            F[
+                                0:N,
+                            ]
+                            - fhat
+                        ).flatten("c")
+                        ** 2
+                    )
+                    / sw
+                )
+
+            # to account for the unknown constraints
+            if isUnknownFeasibilityConstrained:
+                Ghat = npsum(Feasibility_unkn[0:N].T * w) / sw
+            else:
+                Ghat = 1
+
+            if isUnknownSatisfactionConstrained:
+                Shat = npsum(SatConst_unkn[0:N].T * w) / sw
+            else:
+                Shat = 1
+
+        f = fhat - dhat + (delta_G * (1 - Ghat) + delta_S * (1 - Shat)) * dF
+
+        return f
