@@ -15,8 +15,8 @@ glis_instance = GLIS(
     ub=3.0,
     alpha=1.0,
     delta=0.5,
-    globoptsol=GLIS.SubproblemSolver.pswarm,
-    maxevals=10,
+    globoptsol=GLIS.SubproblemSolver.pso,
+    maxevals=30,
     verbose=True,
 )
 sol = glis_instance.run()

@@ -1,7 +1,8 @@
 *.egg
 *.egg-info
 venv
-.vscode
+.vscode/*
+!.vscode/launch.json
 .idea
 core.10480
 *.pyc

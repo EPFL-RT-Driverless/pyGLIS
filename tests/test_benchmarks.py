@@ -11,55 +11,54 @@ import time
 
 import GPyOpt as BO
 import matplotlib.pyplot as plt
-
-from numpy import arange, array, meshgrid, ones
-from numpy import sum as vecsum
-from numpy import zeros
-from numpy.random import seed
-from pyGLIS import *
+import numpy as np
+from pyGLIS import GLIS
+from pyswarm import pso
 
 Ntests = 1
 run_bayesopt = False
 
 if __name__ == "__main__":
-    seed(0)  # rng default for reproducibility
+    # rng default for reproducibility
+    np.random.seed(0)
+
     plt.close("all")
     plt.rcParams.update({"font.size": 22})
     plt.figure(figsize=(14, 7))
 
-    # benchmark="ackley"
-    # benchmark="camelsixhumps"
-    benchmark = "hartman6"
-    # benchmark="rosenbrock8"
+    # benchmark_problem="ackley"
+    # benchmark_problem="camelsixhumps"
+    # benchmark_problem = "hartman6"
+    benchmark_problem = "rosenbrock8"
 
-    if benchmark == "camelsixhumps":
+    if benchmark_problem == "camelsixhumps":
         # Camel six-humps function
         nvars = 2
-        lb = array([-2.0, -1.0])
-        ub = array([2.0, 1.0])
+        lb = np.array([-2.0, -1.0])
+        ub = np.array([2.0, 1.0])
         fun = lambda x: (
             (4.0 - 2.1 * x[0] ** 2 + x[0] ** 4 / 3.0) * x[0] ** 2
             + x[0] * x[1]
             + (4.0 * x[1] ** 2 - 4.0) * x[1] ** 2
         )
-        xopt0 = array(
+        xopt0 = np.array(
             [[0.0898, -0.0898], [-0.7126, 0.7126]]
         )  # unconstrained optimizers, one per column
         fopt0 = -1.0316  # unconstrained optimum
         maxevals = 25
-        use_linear_constraints = 0
-        use_nl_constraints = 0
+        use_linear_constraints = False
+        use_nl_constraints = False
         if use_linear_constraints or use_nl_constraints:
-            run_bayesopt = 0  # constraints not supported
+            run_bayesopt = False  # constraints not supported
 
-    elif benchmark == "hartman6":
+    elif benchmark_problem == "hartman6":
         from math import exp
 
         nvars = 6
-        lb = zeros((nvars, 1)).flatten("c")
-        ub = ones((nvars, 1)).flatten("c")
-        alphaH = array([1.0, 1.2, 3.0, 3.2])
-        AH = array(
+        lb = np.zeros(nvars)
+        ub = np.ones(nvars)
+        alphaH = np.array([1.0, 1.2, 3.0, 3.2])
+        AH = np.array(
             [
                 [10, 3, 17, 3.5, 1.7, 8],
                 [0.05, 10, 17, 0.1, 8, 14],
@@ -67,7 +66,7 @@ if __name__ == "__main__":
                 [17, 8, 0.05, 10, 0.1, 14],
             ]
         )
-        PH = 1e-4 * array(
+        PH = 1e-4 * np.array(
             [
                 [1312, 1696, 5569, 124, 8283, 5886],
                 [2329, 4135, 8307, 3736, 1004, 9991],
@@ -77,72 +76,64 @@ if __name__ == "__main__":
         )
 
         def fun(x):
-            xx = x.flatten("c")
+            # xx = x.flatten("c")
             f = 0
             for j in range(0, 4):
                 aux = 0
                 for i in range(0, 6):
-                    aux = aux + (xx[i] - PH[j, i]) ** 2 * AH[j, i]
+                    aux = aux + (x[i] - PH[j, i]) ** 2 * AH[j, i]
                 f = f - exp(-aux) * alphaH[j]
             return f
 
         fopt0 = -3.32237  # optimum
-        xopt0 = array(
+        xopt0 = np.array(
             [0.20169, 0.150011, 0.476874, 0.275332, 0.311652, 0.6573]
         )  # optimizer
         maxevals = 80
-        use_linear_constraints = 0
-        use_nl_constraints = 0
+        use_linear_constraints = False
+        use_nl_constraints = False
 
-    elif benchmark == "rosenbrock8":
+    elif benchmark_problem == "rosenbrock8":
         nvars = 8
-        lb = -30 * ones((nvars, 1)).flatten("c")
+        lb = -5 * np.ones(nvars)
         ub = -lb
 
         def fun(x):
-            xx = x.flatten("c")
             f = 0
-            for j in range(0, 7):
-                f = f + 100 * (xx[j + 1] - xx[j] ** 2) ** 2 + (1.0 - xx[j]) ** 2
+            for j in range(0, nvars - 1):
+                f = f + 100.0 * (x[j + 1] - x[j] ** 2) ** 2 + (1.0 - x[j]) ** 2
             return f
 
-        maxevals = 80
-        # compute optimum/optimizer by PSO
-        from pyswarm import pso  # https://pythonhosted.org/pyswarm/
+        maxevals = 500
 
-        xopt0, fopt0 = pso(fun, lb, ub, swarmsize=200, minfunc=1e-12, maxiter=10000)
-        use_linear_constraints = 0
-        use_nl_constraints = 0
+        xopt0 = np.ones(nvars)
+        fopt0 = 0.0
+        use_linear_constraints = False
+        use_nl_constraints = False
 
-    elif benchmark == "ackley":
+    elif benchmark_problem == "ackley":
         nvars = 2
-        lb = -5 * ones((nvars, 1)).flatten("c")
+        lb = -5.0 * np.ones(nvars)
         ub = -lb
-        from math import cos, exp, pi, sqrt
 
-        fun = lambda x: array(
-            [
-                -20.0 * exp(-0.2 * sqrt(0.5 * (x[0] ** 2 + x[1] ** 2)))
-                - exp(0.5 * (cos(2.0 * pi * x[0]) + cos(2.0 * pi * x[1])))
-                + exp(1.0)
-                + 20.0
-            ]
+        fun = (
+            lambda x: -20.0 * np.exp(-0.2 * np.sqrt(0.5 * (x[0] ** 2 + x[1] ** 2)))
+            - np.exp(0.5 * (np.cos(2.0 * np.pi * x[0]) + np.cos(2.0 * np.pi * x[1])))
+            + np.exp(1.0)
+            + 20.0
         )
         maxevals = 60
-        # compute optimum/optimizer by PSO
-        from pyswarm import pso  # https://pythonhosted.org/pyswarm/
 
         xopt0, fopt0 = pso(fun, lb, ub, swarmsize=200, minfunc=1e-12, maxiter=10000)
-        use_linear_constraints = 0
-        use_nl_constraints = 0
+        use_linear_constraints = False
+        use_nl_constraints = False
 
-    problem = glis.glis.default(nvars)
-
-    problem["Aineq"] = []
-    problem["bineq"] = []
-
-    if use_linear_constraints and benchmark == "camelsixhumps":
-        problem["Aineq"] = array(
+    glis_instance = GLIS(
+        nvar=nvars,
+        f=fun,
+        ub=ub,
+        lb=lb,
+        Aineq=np.array(
             [
                 [1.6295, 1],
                 [-1, 4.4553],
@@ -151,47 +142,30 @@ if __name__ == "__main__":
                 [17.6198, 1],
             ]
         )
-
-        problem["bineq"] = array([[3.0786, 2.7417, -1.4909, 1, 32.5198]])
-
-    if use_nl_constraints and benchmark == "camelsixhumps":
-        # problem["g"] = lambda x: array([(x[0]-1)**2+x[1]**2-.25,
-        #       (x[0]-0.5)**2+(x[1]-0.5)**2-.25])
-        problem["g"] = lambda x: array([x[0] ** 2 + (x[1] + 0.1) ** 2 - 0.5])
-
-    problem["lb"] = lb
-    problem["ub"] = ub
-    problem["f"] = fun
-    problem["maxevals"] = maxevals
-    problem["useRBF"] = 1  # use Radial Basis Functions
-    # problem["useRBF"] = 0 # Inverse Distance Weighting
-
-    if problem["useRBF"]:
-        epsil = 0.5
-
-        def fun_rbf(x1, x2):
-            return 1 / (1 + epsil**2 * vecsum((x1 - x2) ** 2, axis=-1))
-
-        problem["rbf"] = fun_rbf
-
-    problem["alpha"] = 1
-    problem["delta"] = 0.5
-
-    problem["nsamp"] = 2 * nvars
-    problem["svdtol"] = 1e-6
-    # problem["globoptsol"] = "direct"
-    problem["globoptsol"] = "pswarm"
-    problem["display"] = 1
-    problem["scalevars"] = 1
-
-    problem["constraint_penalty"] = 1e3
-    problem["feasible_sampling"] = False
+        if use_linear_constraints and benchmark_problem == "camelsixhumps"
+        else None,
+        bineq=np.array([[3.0786, 2.7417, -1.4909, 1, 32.5198]])
+        if use_linear_constraints and benchmark_problem == "camelsixhumps"
+        else None,
+        g=(lambda x: np.array([x[0] ** 2 + (x[1] + 0.1) ** 2 - 0.5]))
+        if use_nl_constraints and benchmark_problem == "camelsixhumps"
+        else None,
+        maxevals=maxevals,
+        useRBF=True,
+        globoptsol=GLIS.SubproblemSolver.pso,
+        verbose=True,
+        scalevars=True,
+        constraint_penalty=1.0e3,
+        feasible_sampling=False,
+        alpha=1.0,
+        delta=0.5,
+    )
 
     print("Running GLIS optimization:\n")
 
     for i in range(0, Ntests):
         tic = time.perf_counter()
-        out = glis.glis.solve(problem)
+        out = glis_instance.run()
         toc = time.perf_counter()
         print("Test # %2d, elapsed time: %5.4f" % (i + 1, toc - tic))
 
@@ -200,11 +174,11 @@ if __name__ == "__main__":
         F = out["F"]
         X = out["X"]
 
-        minf = zeros((maxevals, 1))
+        minf = np.zeros((maxevals, 1))
         for j in range(maxevals):
             minf[j] = min(F[0 : j + 1])
 
-        plt.plot(arange(0, maxevals), minf, color=[0.8500, 0.3250, 0.0980])
+        plt.plot(np.arange(0, maxevals), minf, color=[0.8500, 0.3250, 0.0980])
 
     if run_bayesopt:
 
@@ -214,7 +188,7 @@ if __name__ == "__main__":
             x,
         ):  #  the objective function must have 2d numpy arrays as input and output
             xx = x[0]
-            ff = zeros((1, 1))
+            ff = np.zeros((1, 1))
             ff[0, 0] = fun(xx)
             return ff
 
@@ -242,12 +216,12 @@ if __name__ == "__main__":
             FBO = Bopt.Y
             maxevalsBO = FBO.size
 
-            minfBO = zeros((maxevalsBO, 1))
+            minfBO = np.zeros((maxevalsBO, 1))
             for j in range(maxevalsBO):
                 minfBO[j] = min(FBO[0 : j + 1])
 
             plt.plot(
-                arange(0, maxevalsBO), minfBO, color=[237 / 256, 177 / 256, 32 / 256]
+                np.arange(0, maxevalsBO), minfBO, color=[237 / 256, 177 / 256, 32 / 256]
             )
 
     plt.grid()
@@ -256,7 +230,7 @@ if __name__ == "__main__":
         if run_bayesopt:
             thelegend.append("BO")
         if not (use_linear_constraints or use_nl_constraints):
-            plt.plot(arange(0, maxevals), fopt0 * ones(maxevals))
+            plt.plot(np.arange(0, maxevals), fopt0 * np.ones(maxevals))
             thelegend.append("optimum")
         plt.legend(thelegend)
     else:
@@ -278,11 +252,13 @@ if __name__ == "__main__":
 
         fig, ax = plt.subplots(figsize=(14, 7))
 
-        [x, y] = meshgrid(arange(lb[0], ub[0], 0.01), arange(lb[1], ub[1], 0.01))
-        z = zeros(x.shape)
+        [x, y] = np.meshgrid(
+            np.arange(lb[0], ub[0], 0.01), np.arange(lb[1], ub[1], 0.01)
+        )
+        z = np.zeros(x.shape)
         for i in range(0, x.shape[0]):
             for j in range(0, x.shape[1]):
-                z[i, j] = fun(array([x[i, j], y[i, j]]))
+                z[i, j] = fun(np.array([x[i, j], y[i, j]]))
 
         plt.contour(x, y, z, 100, alpha=0.4)
         plt.plot(
@@ -306,7 +282,7 @@ if __name__ == "__main__":
 
         patches = []
         if use_linear_constraints:
-            V = array(
+            V = np.array(
                 [
                     [0.4104, -0.2748],
                     [0.1934, 0.6588],
@@ -322,12 +298,12 @@ if __name__ == "__main__":
         if use_nl_constraints:
             from math import sin
 
-            th = arange(0, 2 * pi, 0.01)
+            th = np.arange(0, 2 * np.pi, 0.01)
             N = th.size
-            V = zeros((N, 2))
+            V = np.zeros((N, 2))
             for i in range(0, N):
-                V[i, 0] = 0 + sqrt(0.5) * cos(th[i])
-                V[i, 1] = -0.1 + sqrt(0.5) * sin(th[i])
+                V[i, 0] = 0 + np.sqrt(0.5) * np.cos(th[i])
+                V[i, 1] = -0.1 + np.sqrt(0.5) * np.sin(th[i])
             circle = mpatches.Polygon(V, True)
             patches.append(circle)
 

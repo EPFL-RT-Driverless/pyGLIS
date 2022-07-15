@@ -1,6 +1,5 @@
 #  Copyright (c) 2022. Tudor Oancea EPFL Racing Team Driverless
-# (C) 2019 A. Bemporad, July 6, 2019
-# Solve (GL)obal optimization problems using (I)nverse distance weighting and radial basis function (S)urrogates.
+#  Solve (GL)obal optimization problems using (I)nverse distance weighting and radial basis function (S)urrogates.
 
 import contextlib
 from enum import Enum
@@ -17,10 +16,9 @@ from scipy.optimize import linprog
 
 class GLIS:
     class SubproblemSolver(Enum):
-        pswarm = 0
+        pso = 0
         direct = 1
 
-    # TODO: create an Enum for globoptsol (pswarm or nlopt)
     # function to minimize and its number of variables
     f: Callable
     nvar: int
@@ -51,6 +49,8 @@ class GLIS:
     epsilon_DeltaF: float
 
     # variables used during execution of the solver
+    f0: Callable  # specified objective function that will be used either to define the actual objective function as is, or after rescaling.
+    g0: Callable  # specified nonlinear constraints that will be used either to define the actual nonlinear constraints as is, or after rescaling.
     isLinConstrained: bool
     isNLConstrained: bool
     X: np.ndarray
@@ -70,13 +70,13 @@ class GLIS:
         alpha=1,
         delta=0.5,
         useRBF=True,
-        rbf=lambda x1, x2: 1 / (1 + 0.25 * np.sum((x1 - x2) ** 2)),
+        rbf=lambda x1, x2: 1 / (1 + 0.25 * np.sum(np.square(x1 - x2), axis=-1)),
         scalevars=True,
         svdtol=1e-6,
         shrink_range=False,
         constraint_penalty=1000.0,
         feasible_sampling=True,
-        globoptsol=SubproblemSolver.pswarm,
+        globoptsol=SubproblemSolver.pso,
         verbose=False,
         PSOiters=1000,
         PSOswarmsize=30,
@@ -154,7 +154,7 @@ class GLIS:
 
         # store parameters
         self.nvar = nvar
-        self.f = f
+        self.f0 = f
         self.lb = lb
         self.ub = ub
         self.maxevals = maxevals
@@ -167,7 +167,7 @@ class GLIS:
         self.svdtol = svdtol
         self.Aineq = Aineq
         self.bineq = bineq
-        self.g = g
+        self.g0 = g
         self.shrink_range = shrink_range
         self.constraint_penalty = constraint_penalty
         self.feasible_sampling = feasible_sampling
@@ -182,7 +182,7 @@ class GLIS:
     def initialize_sample_points(self):
         # check what constraints were specified
         self.isLinConstrained = self.bineq is not None and self.Aineq is not None
-        self.isNLConstrained = self.g is not None
+        self.isNLConstrained = self.g0 is not None
         if not self.isLinConstrained and not self.isNLConstrained:
             self.feasible_sampling = False
 
@@ -192,17 +192,20 @@ class GLIS:
             self.d0 = (self.ub + self.lb) / 2
             self.lb = -np.ones(self.nvar)
             self.ub = np.ones(self.nvar)
-            self.f = lambda x: self.f(x * self.dd + self.d0)
+            self.f = lambda x: self.f0(x * self.dd + self.d0)
 
             if self.isLinConstrained:
                 self.bineq = self.bineq - self.Aineq.dot(self.d0)
                 self.Aineq = self.Aineq.dot(np.diag(self.dd.flatten("C")))
 
             if self.isNLConstrained:
-                self.g = lambda x: self.g(x * self.dd + self.d0)
+                self.g = lambda x: self.g0(x * self.dd + self.d0)
+        else:
+            self.f = self.f0
+            self.g = self.g0
 
         # set solver options for the minimization of the acquisition function
-        if self.globoptsol == GLIS.SubproblemSolver.pswarm:
+        if self.globoptsol == GLIS.SubproblemSolver.pso:
             self.DIRECTopt = None
         else:  # self.globoptsol == "direct"
             self.DIRECTopt = nlopt.opt(nlopt.GN_DIRECT, 2)
@@ -317,7 +320,7 @@ class GLIS:
             self.M = None
 
     def minimize(self, obj_fun):
-        if self.globoptsol == GLIS.SubproblemSolver.pswarm:
+        if self.globoptsol == GLIS.SubproblemSolver.pso:
             if self.verbose:
                 z, _ = pso(
                     obj_fun,
@@ -344,13 +347,7 @@ class GLIS:
 
     def get_rbf_weights(self, NX):
         # Solve M*W = F using SVD
-        assert self.M.shape == (
-            NX,
-            NX,
-        ), "Gram matrix M has wrong shape: {} instead of {}".format(
-            self.M.shape, (NX, NX)
-        )
-        U, dS, V = np.linalg.vd(self.M)
+        U, dS, V = np.linalg.svd(self.M[np.ix_(range(NX), range(NX))])
         non_nnegligeable_singular_values_idx = np.nonzero(dS >= self.svdtol)[0]
         ns = np.max(non_nnegligeable_singular_values_idx) + 1
         W = np.transpose(V[0:ns, :]).dot(
@@ -362,7 +359,7 @@ class GLIS:
     def facquisition(self, x, N, dF, W):
         # Acquisition function to minimize to get next sample
 
-        d = np.sum(np.square(self.X[0:N, :] - x.reshape(-1, 1)), axis=1)
+        d = np.sum(np.square(self.X[0:N, :] - x.reshape(1, -1)), axis=1)
 
         ii = np.nonzero(d < 1e-12)[0]
         if ii.size > 0:
@@ -380,7 +377,7 @@ class GLIS:
                 fhat = np.sum(self.F[:N] * w) / sw
 
             s = np.sqrt(np.sum(w * np.square(self.F[0:N] - fhat)) / sw)
-            z = 2.0 / np.pi * np.atan(1.0 / np.sum(1.0 / d))
+            z = 2.0 / np.pi * np.arctan(1.0 / np.sum(1.0 / d))
 
         f = fhat - self.delta * s - self.alpha * dF * z
 
@@ -411,8 +408,8 @@ class GLIS:
 
         # find the optimal point among the FEASIBLE initial samples
         fbest = np.inf
-        zbest = np.zeros(np.nsamp)
-        for i in range(np.nsamp):
+        zbest = np.zeros(self.nsamp)
+        for i in range(self.nsamp):
             isfeas = True
             if self.isLinConstrained:
                 isfeas = isfeas and np.all(self.Aineq.dot(self.X[i, :]) <= self.bineq)
@@ -432,7 +429,7 @@ class GLIS:
 
             time_iter_start = perf_counter()
 
-            dF = np.max(
+            dF = np.maximum(
                 (np.max(self.F[0 : self.nsamp]) - np.min(self.F[0 : self.nsamp])),
                 self.epsilon_DeltaF,
             )
@@ -473,9 +470,9 @@ class GLIS:
 
             # minimize the acquisition function to get a new sample point z
             time_opt_acq_start = perf_counter()
-            if self.globoptsol == GLIS.SubproblemSolver.pswarm:
+            if self.globoptsol == GLIS.SubproblemSolver.pso:
                 with contextlib.redirect_stdout(io.StringIO()):
-                    z, _ = pso(
+                    x_next, _ = pso(
                         acquisition,
                         self.lb,
                         self.ub,
@@ -486,22 +483,22 @@ class GLIS:
 
             else:
                 self.DIRECTopt.set_min_objective(lambda x, grad: acquisition(x)[0])
-                z = self.DIRECTopt.optimize(z.flatten())
+                x_next = self.DIRECTopt.optimize(x_next.flatten())
 
             time_opt_acquisition.append(perf_counter() - time_opt_acq_start)
 
             # evaluate the objective function f at the new sample point z
             time_fun_eval_start = perf_counter()
-            fz = self.f(z)
+            f_x_next = self.f(x_next)
             time_f_eval.append(perf_counter() - time_fun_eval_start)
 
             # update everything
             N = N + 1
-            self.X[N - 1, :] = z
-            self.F[N - 1] = fz
+            self.X[N - 1, :] = x_next
+            self.F[N - 1] = f_x_next
 
-            Fmax = np.max(Fmax, fz)
-            Fmin = np.min(Fmin, fz)
+            Fmax = np.max((Fmax, f_x_next))
+            Fmin = np.min((Fmin, f_x_next))
 
             time_fit_surrogate_start = perf_counter()
             if self.useRBF:
@@ -518,13 +515,12 @@ class GLIS:
 
             time_fit_surrogate.append(perf_counter() - time_fit_surrogate_start)
 
-            if fbest > fz:
-                # TODO: do we really need the copies ?
-                fbest = fz.copy()
-                zbest = z.copy()
+            if fbest > f_x_next:
+                fbest = f_x_next.copy()
+                zbest = x_next.copy()
 
             if self.verbose:
-                print("N = %4d, cost = %7.4f, best = %7.4f" % (N, fz, fbest))
+                print("N = %4d, cost = %7.4f, best = %7.4f" % (N, f_x_next, fbest))
                 string = ""
                 for j in range(self.nvar):
                     aux = zbest[j]
@@ -539,16 +535,12 @@ class GLIS:
         # end of the sample acquisition
 
         # find best result and return it
+        fopt = fbest.copy()
         xopt = zbest.copy()
         if self.scalevars:
             # Scale variables back
             xopt = xopt * self.dd + self.d0
             self.X = self.X * (np.ones((N, 1)) * self.dd) + np.ones((N, 1)) * self.d0
-
-        fopt = fbest.copy()
-
-        if not self.useRBF:
-            rbf_weights = []
 
         out = {
             "xopt": xopt,

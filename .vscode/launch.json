@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "naive_test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/tests/naive_test.py",
+            "cwd": "${workspaceFolder}/tests",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "test_benchmarks",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/tests/test_benchmarks.py",
+            "cwd": "${workspaceFolder}/tests",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+    ]
+}
