@@ -1,2 +1,7 @@
 *.egg
 *.egg-info
+venv
+.vscode
+.idea
+core.10480
+*.pyc
