@@ -1,5 +1,11 @@
 tasks:
-  - init: sh init_workspace.sh
+  - name: Install dependencies
+    init: |
+      python3 -m venv venv
+      source venv/bin/activate
+      pip3 install -r requirements.txt
+      pip3 install black pre-commit
+      pip3 install -e .
 
 github:
   prebuilds:
@@ -10,3 +16,5 @@ vscode:
     - "mhutchie.git-graph"
     - "ms-python.python"
     - "Gruntfuggly.todo-tree"
+    - "eamodio.gitlens"
+    - "donjayamanne.python-environment-manager"

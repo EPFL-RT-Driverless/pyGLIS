@@ -11,7 +11,7 @@ glis_instance = GLIS(
     f=lambda x: (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
     + x**2 / 12
     + x / 10,
-    lb=np.array([-3.0]),
+    lb=-3.0,
     ub=3.0,
     alpha=1.0,
     delta=0.5,

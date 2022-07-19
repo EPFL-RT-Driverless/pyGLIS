@@ -7,10 +7,10 @@ import io
 from time import perf_counter
 from typing import Callable
 
-import nlopt  # https://nlopt.readthedocs.io
+import nlopt
 import numpy as np
-from pyDOE import lhs  # https://pythonhosted.org/pyDOE/
-from pyswarm import pso  # https://pythonhosted.org/pyswarm/
+from pyDOE import lhs
+from pyswarm import pso
 from scipy.optimize import linprog
 
 
@@ -117,6 +117,11 @@ class GLIS:
         if nsamp is None:
             nsamp = 2 * nvar
 
+        if type(ub) == float:
+            ub = np.array(ub)
+        if type(lb) == float:
+            lb = np.array(lb)
+
         # Test the coherence of the provided configuration
         assert svdtol > 0.0, "svdtol must be positive but svdtol = {}".format(svdtol)
         assert alpha > 0.0, "alpha must be positive but alpha = {}".format(alpha)
@@ -196,7 +201,7 @@ class GLIS:
 
             if self.isLinConstrained:
                 self.bineq = self.bineq - self.Aineq.dot(self.d0)
-                self.Aineq = self.Aineq.dot(np.diag(self.dd.flatten("C")))
+                self.Aineq = self.Aineq.dot(np.diag(self.dd))
 
             if self.isNLConstrained:
                 self.g = lambda x: self.g0(x * self.dd + self.d0)
@@ -414,7 +419,7 @@ class GLIS:
             if self.isLinConstrained:
                 isfeas = isfeas and np.all(self.Aineq.dot(self.X[i, :]) <= self.bineq)
             if self.isNLConstrained:
-                isfeas = isfeas and np.all(self.g(X[i, :]) <= 0)
+                isfeas = isfeas and np.all(self.g(self.X[i, :]) <= 0)
             if isfeas and fbest > self.F[i]:
                 fbest = self.F[i]
                 zbest = self.X[i, :]
@@ -470,6 +475,7 @@ class GLIS:
 
             # minimize the acquisition function to get a new sample point z
             time_opt_acq_start = perf_counter()
+            x_next = self.lb
             if self.globoptsol == GLIS.SubproblemSolver.pso:
                 with contextlib.redirect_stdout(io.StringIO()):
                     x_next, _ = pso(
@@ -483,7 +489,7 @@ class GLIS:
 
             else:
                 self.DIRECTopt.set_min_objective(lambda x, grad: acquisition(x)[0])
-                x_next = self.DIRECTopt.optimize(x_next.flatten())
+                x_next = self.DIRECTopt.optimize(x_next)
 
             time_opt_acquisition.append(perf_counter() - time_opt_acq_start)
 
