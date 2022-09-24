@@ -1,8 +1,21 @@
+# Copyright (c) Tudor Oancea, EPFL Racing Team Driverless, 2022
 from setuptools import setup, find_packages
+
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
+with open("requirements.txt", "r") as fh:
+    requirements = fh.read().splitlines()
+    # remove lines that start with #
+    requirements = [
+        r
+        for r in requirements
+        if not (r.startswith("#") or r.startswith("-e git+") or r.startswith("git+"))
+    ]
 
 setup(
     name="pyGLIS",
-    version="1.0.0",
+    version="2.0.0",
     description="A Python implementation of the derivative-free global optimization package GLIS developed by ",
     url="https://github.com/EPFL-RT-Driverless/pyGLIS",
     author="Tudor Oancea",
@@ -19,5 +32,5 @@ setup(
         "Private :: Do Not Upload",
     ],
     packages=find_packages(include=["pyGLIS"]),
-    install_requires=["numpy", "scipy", "pyDOE", "pyswarm", "nlopt"],
+    install_requires=requirements,
 )
