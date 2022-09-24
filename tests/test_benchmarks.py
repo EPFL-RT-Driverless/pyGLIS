@@ -22,10 +22,10 @@ if __name__ == "__main__":
     plt.rcParams.update({"font.size": 22})
     plt.figure(figsize=(14, 7))
 
-    # benchmark_problem="ackley"
-    benchmark_problem="camelsixhumps"
+    # benchmark_problem = "ackley"
+    # benchmark_problem = "camelsixhumps"
     # benchmark_problem = "hartman6"
-    # benchmark_problem = "rosenbrock8"
+    benchmark_problem = "rosenbrock8"
 
     if benchmark_problem == "camelsixhumps":
         # Camel six-humps function
