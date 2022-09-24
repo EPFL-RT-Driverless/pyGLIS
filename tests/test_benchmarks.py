@@ -2,18 +2,14 @@
 #
 # (C) 2019 A. Bemporad, June 14, 2019
 
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
 import time
 
 import GPyOpt as BO
 import matplotlib.pyplot as plt
 import numpy as np
-from pyGLIS import GLIS
 from pyswarm import pso
+
+from pyGLIS import GLIS
 
 Ntests = 1
 run_bayesopt = False
@@ -26,8 +22,8 @@ if __name__ == "__main__":
     plt.rcParams.update({"font.size": 22})
     plt.figure(figsize=(14, 7))
 
-    # benchmark_problem="ackley"
-    # benchmark_problem="camelsixhumps"
+    # benchmark_problem = "ackley"
+    # benchmark_problem = "camelsixhumps"
     # benchmark_problem = "hartman6"
     benchmark_problem = "rosenbrock8"
 
@@ -45,9 +41,9 @@ if __name__ == "__main__":
             [[0.0898, -0.0898], [-0.7126, 0.7126]]
         )  # unconstrained optimizers, one per column
         fopt0 = -1.0316  # unconstrained optimum
-        maxevals = 25
-        use_linear_constraints = False
-        use_nl_constraints = False
+        maxevals = 100
+        use_linear_constraints = True
+        use_nl_constraints = True
         if use_linear_constraints or use_nl_constraints:
             run_bayesopt = False  # constraints not supported
 
@@ -76,7 +72,6 @@ if __name__ == "__main__":
         )
 
         def fun(x):
-            # xx = x.flatten("c")
             f = 0
             for j in range(0, 4):
                 aux = 0
@@ -144,7 +139,7 @@ if __name__ == "__main__":
         )
         if use_linear_constraints and benchmark_problem == "camelsixhumps"
         else None,
-        bineq=np.array([[3.0786, 2.7417, -1.4909, 1, 32.5198]])
+        bineq=np.array([3.0786, 2.7417, -1.4909, 1, 32.5198])
         if use_linear_constraints and benchmark_problem == "camelsixhumps"
         else None,
         g=(lambda x: np.array([x[0] ** 2 + (x[1] + 0.1) ** 2 - 0.5]))
@@ -152,7 +147,6 @@ if __name__ == "__main__":
         else None,
         maxevals=maxevals,
         useRBF=True,
-        globoptsol=GLIS.SubproblemSolver.pso,
         verbose=True,
         scalevars=True,
         constraint_penalty=1.0e3,
@@ -265,12 +259,8 @@ if __name__ == "__main__":
             X[:, 0], X[:, 1], "*", color=[237 / 256, 177 / 256, 32 / 256], markersize=11
         )
         plt.plot(
-            xopt0[
-                0,
-            ],
-            xopt0[
-                1,
-            ],
+            xopt0[0],
+            xopt0[1],
             "o",
             color=[0, 0.4470, 0.7410],
             markersize=15,

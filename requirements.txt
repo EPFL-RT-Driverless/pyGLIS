@@ -5,5 +5,5 @@ scipy
 pyDOE
 pyswarm
 nlopt
-matplotlib
+matplotlib==3.5
 GPyOpt

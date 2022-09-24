@@ -1,9 +1,5 @@
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
 import numpy as np
+
 from pyGLIS import *
 
 glis_instance = GLIS(
@@ -15,9 +11,10 @@ glis_instance = GLIS(
     ub=3.0,
     alpha=1.0,
     delta=0.5,
-    globoptsol=GLIS.SubproblemSolver.pso,
-    maxevals=30,
+    maxevals=140,
     verbose=True,
+    load_previous_results=True,
+    # load_previous_results=False,
 )
 sol = glis_instance.run()
 
