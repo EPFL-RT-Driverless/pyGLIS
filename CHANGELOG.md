@@ -1,3 +1,9 @@
+# v2.2.0
+Simplified a lot the interface by removing useless features:
+- IDW functions
+- linear and nonlinear constraints
+Also fixed bugs on scaling of variables during data dumping and data loading
+
 # v2.1.1
 :heavy_minus_sign: Removed useless deps (in particular `nlopt`)
 
