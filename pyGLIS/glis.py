@@ -155,17 +155,17 @@ class GLIS:
 
         def test_callable(callback, callback_name):
             try:
-                callback(np.zeros(nvar))
-            except Exception:
+                callback(np.ones(nvar))
+            except Exception as e:
                 raise ValueError(
-                    "{} does not handle inputs of the appropriate size nvar={}".format(
-                        callback_name, nvar
+                    "{} does not handle inputs of the appropriate size nvar={}, error message={}".format(
+                        callback_name, nvar, e
                     )
                 )
 
-        test_callable(f, "f")
-        if g is not None:
-            test_callable(g, "g")
+        # test_callable(f, "f")
+        # if g is not None:
+        #     test_callable(g, "g")
 
         if bineq is not None and Aineq is not None:
             assert len(Aineq.shape) == 2, "Aineq must be a 2D array"
@@ -491,7 +491,7 @@ class GLIS:
             # dump this iteration result in the csv file
             with open(self.csv_dump_file, "a") as f:
                 writer = csv.writer(f)
-                writer.writerow(list(f_x_next) + list(x_next))
+                writer.writerow([f_x_next] + x_next.tolist())
 
             self.time_iter.append(perf_counter() - time_iter_start)
 

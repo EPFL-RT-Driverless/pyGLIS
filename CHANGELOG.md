@@ -1,3 +1,6 @@
+# v2.1.1
+:heavy_minus_sign: Removed useless deps (in particular `nlopt`)
+
 # v2.1.0
 Usage of minimize method from scipy
 Implement data serialization
