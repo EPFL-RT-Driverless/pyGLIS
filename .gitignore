@@ -6,3 +6,4 @@ venv
 .idea
 core.10480
 *.pyc
+*.csv
