@@ -322,7 +322,7 @@ class GLIS:
                 )
                 # if the optimization of the acquisition function fails, we just
                 # sample a random point
-                x_next = self.lb + (self.ub - self.lb) * np.random.rand(self.dim)
+                x_next = self.lb + (self.ub - self.lb) * np.random.rand(*self.lb.shape)
 
             # evaluate the objective function f at the new sample point x_next
             time_fun_eval_start = perf_counter()
@@ -391,7 +391,7 @@ class GLIS:
     def _print_iteration(self):
         if self.verbose:
             print(
-                "self.N = %4d, fbest = %7.4f, f = %7.4f, x = %s"
+                "N = %4d, fbest = %7.4f, f = %7.4f, x = %s"
                 % (
                     self.N,
                     self.fbest,
