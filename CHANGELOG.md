@@ -1,3 +1,7 @@
+# v2.2.2
+
+moved GPyOpt and pyswarm from requirements.txt to requirements_dev.txt
+
 # v2.2.1
 
 fixed dimension in cobyla failure handling

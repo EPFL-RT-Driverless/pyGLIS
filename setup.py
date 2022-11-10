@@ -15,16 +15,16 @@ with open("requirements.txt", "r") as fh:
 
 setup(
     name="pyGLIS",
-    version="2.2.1",
+    version="2.2.2",
     description="A Python implementation of the derivative-free global optimization package GLIS developed by ",
     url="https://github.com/EPFL-RT-Driverless/pyGLIS",
     author="Tudor Oancea, Auguste Poiroux",
     license="MIT",
     classifiers=[
-        "Development Status :: 1 - Planning",
+        # "Development Status :: 1 - Planning",
         # "Development Status :: 2 - Pre-Alpha",
         # "Development Status :: 3 - Alpha",
-        # "Development Status :: 4 - Beta",
+        "Development Status :: 4 - Beta",
         # "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License",
