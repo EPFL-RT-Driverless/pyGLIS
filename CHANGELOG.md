@@ -1,3 +1,7 @@
+# v2.2.3
+
+added `COLCON_IGNORE` file to ignore this package in colcon builds (for brains repo)
+
 # v2.2.2
 
 moved GPyOpt and pyswarm from requirements.txt to requirements_dev.txt
